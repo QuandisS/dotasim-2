@@ -15,10 +15,12 @@ def commit():
     global bd
     bd.commit()
 
+
 def get_teams_list():
     cursor.execute("SELECT Name FROM Teams")
     teams = list(itertools.chain(*cursor.fetchall()))
     return teams
+
 
 def get_heroes_list():
     cursor.execute("SELECT Name FROM Heroes")
@@ -93,3 +95,46 @@ def create_hero(name, positions, fight_k, farm_k, teamwork_k):
 def end_connection():
     cursor.close()
     bd.close()
+
+
+# Returns true if names is valid
+def check_team_names(team1_name: str, team2_name: str) -> bool:
+    cursor.execute("""SELECT name from Teams""")
+    teams = list(itertools.chain(*cursor.fetchall()))
+    if team1_name not in teams or team2_name not in teams:
+        return False
+
+    return True
+
+
+def get_coach_stats(team_name: str) -> list[int]:
+    t_name = []
+    t_name.append(team_name)
+    cursor.execute("""select Morale, Communication
+                      from Teams t, CoachStats cs
+                      where 
+	                  t.Name = ? AND 
+	                  cs.TeamId = t.Id""", t_name)
+    return list(itertools.chain(*cursor.fetchall()))
+
+
+def get_player_ids(team_name: str) -> list[int]:
+    t_name = []
+    t_name.append(team_name)
+    cursor.execute("""select p.Id 
+                      from Players p, Teams t 
+                      where 
+	                      t.name = ? AND 
+	                      p.TeamId = t.Id """, t_name)
+    return list(itertools.chain(*cursor.fetchall()))
+
+
+def get_player_info(id: int) -> list[str, str, int, int, int]:
+    p_id = []
+    p_id.append(id)
+    cursor.execute("""SELECT p.Nickname, p."Position", ps.Fight, ps.Farm, ps.Teamwork
+                      from Players p, PlayerStats ps
+                      WHERE
+	                        p.Id = ? AND 
+	                        p.Id = ps.PlayerId """, p_id)
+    return list(itertools.chain(*cursor.fetchall()))

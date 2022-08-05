@@ -1,7 +1,7 @@
 import db
 import random as r
 from colorama import *
-
+from team import *
 
 def create_team():
     team_name = input("Team name: ")
@@ -90,8 +90,54 @@ def print_hero_list_by_position(inp: str):
 def print_team_list():
     print(db.get_teams_list())
 
+
+def get_coefficient(param: int) -> float:
+    return 1 + (param/100)
+
+
 def start_quick_match():
-    
+    match_count = int(input("Match count: "))
+
+    while True:
+        team1_name = input("Team 1: ")
+        team2_name = input("Team 2: ")
+
+        if not db.check_team_names(team1_name, team2_name):
+            print("invalid team name")
+            continue
+
+        team1 = Team(team1_name, *db.get_coach_stats(team1_name))
+        team2 = Team(team2_name, *db.get_coach_stats(team2_name))
+
+        team1_ids = db.get_player_ids(team1.name)
+        for id in team1_ids:
+           team1.append_player(Player(*db.get_player_info(id)))
+
+        team2_ids = db.get_player_ids(team2.name)
+        for id in team2_ids:
+            team2.append_player(Player(*db.get_player_info(id)))
+
+        for i in range(match_count):
+            print("Match", i, "started")
+
+            base_hp = [100, 100]
+            teams_score = [0, 0]
+
+            teams = [team1, team2]
+            for team in teams:
+                team.reset_gold()
+
+            game_over = False
+            clock = 0
+            while not game_over:
+                event = r.choices(['farm', 'fight'], weights=[0.83, 0.17], k=1)[0]
+                if event == 'farm':
+                    for team in teams:
+                        for player in team.players:
+                            player.gold += int(r.randint(10, 100) * get_coefficient(player.gold))
+                clock += 1
+
+
 
 def main():
     db.init()
@@ -117,6 +163,9 @@ def main():
         elif user_input == "q":
             db.end_connection()
             break
+
+        elif user_input == "qm":
+            start_quick_match()
 
 
 if __name__ == '__main__':
