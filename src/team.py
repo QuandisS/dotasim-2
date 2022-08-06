@@ -13,3 +13,9 @@ class Team:
     def reset_gold(self):
         for player in self.players:
             player.gold = 0
+
+    def get_networth(self) -> int:
+        net = 0
+        for player in self.players:
+            net += player.gold
+        return net

@@ -1,5 +1,6 @@
 import sqlite3
 import itertools
+from team import *
 
 bd = sqlite3.connect('../data/data.db')
 cursor = bd.cursor()
@@ -129,12 +130,93 @@ def get_player_ids(team_name: str) -> list[int]:
     return list(itertools.chain(*cursor.fetchall()))
 
 
-def get_player_info(id: int) -> list[str, str, int, int, int]:
+def get_player_info(id: int) -> list[str, str, int, int, int, str]:
     p_id = []
     p_id.append(id)
-    cursor.execute("""SELECT p.Nickname, p."Position", ps.Fight, ps.Farm, ps.Teamwork
+    cursor.execute("""SELECT p.Nickname, p."Position", ps.Fight, ps.Farm, ps.Teamwork, ps.Signatures
                       from Players p, PlayerStats ps
                       WHERE
 	                        p.Id = ? AND 
 	                        p.Id = ps.PlayerId """, p_id)
     return list(itertools.chain(*cursor.fetchall()))
+
+
+def get_hero_ids() -> list[int]:
+    cursor.execute("""select h.Id
+                      from Heroes h""")
+    return list(itertools.chain(*cursor.fetchall()))
+
+
+def get_hero_info(id: int) -> list[str, int, int, int, str]:
+    h_id = []
+    h_id.append(id)
+    cursor.execute("""select h.Name, hs.FightK, hs.FarmK, hs.TeamworkK, h.Positions
+                      from Heroes h, HeroStats hs
+                      WHERE 
+	                      h.Id = ? AND 
+	                      hs.HeroId = h.Id """, h_id)
+    return list(itertools.chain(*cursor.fetchall()))
+
+
+def update_coach_stats(team: Team, wins: int, loses: int):
+    t_name = []
+    t_name.append(team.name)
+    cursor.execute("""SELECT cs.Id 
+                      from Teams t, CoachStats cs 
+                      where 
+	                  t.Id = cs.TeamId AND
+	                  t.name = ?""", t_name)
+    coach_stat_id = cursor.fetchone()[0]
+    to_coach_stats = (wins, loses, coach_stat_id)
+    cursor.execute("""UPDATE CoachStats 
+                      set Wins = Wins + ?,
+                      Loses = Loses + ?
+                      WHERE Id = ?""", to_coach_stats)
+    commit()
+
+
+def update_player_stats(player: Player, wins_n: int, loses_n: int):
+    player_name = []
+    player_name.append(player.name)
+    cursor.execute("""SELECT p.Id 
+                     from Players p 
+                     WHERE p.Nickname = ?""", player_name)
+    player_id = cursor.fetchone()[0]
+
+    to_stats = (wins_n, loses_n, player.kills, player.deaths, player.assists, player_id)
+    cursor.execute("""update PlayerStats 
+                      set Wins = Wins + ?,
+                        Loses = Loses + ?,
+                        Kills = Kills + ?,
+                        Deaths = Deaths + ?,
+                        Assists = Assists + ?
+                      WHERE 
+                        PlayerId = ?""", to_stats)
+    commit()
+
+def update_stats(teams: list[Team], wins: list[int]) -> None:
+    for i in range(2):
+        wins_n = wins[i]
+        loses_n = wins[1 if i==0 else 0]
+        update_coach_stats(teams[i], wins_n, loses_n)
+        for player in teams[i].players:
+            update_player_stats(player, wins_n, loses_n)
+
+
+def update_hero_stats(teams: list[Team], won_team_id: int):
+    for i in range(2):
+        win = 1 if won_team_id == i else 0
+        loss = 1 if won_team_id != i else 0
+        for player in teams[i].players:
+            h_name = []
+            h_name.append(player.hero.name)
+            cursor.execute("""select h.Id 
+                              from Heroes h 
+                              WHERE h.Name = ?""", h_name)
+            h_id = cursor.fetchone()[0]
+            to_hero_stats = (win, loss, h_id)
+            cursor.execute("""update HeroStats 
+                              set Wins = Wins + ?,
+                                  Loses = Loses + ?
+                              where HeroId = ?""", to_hero_stats)
+    commit()

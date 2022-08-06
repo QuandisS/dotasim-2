@@ -2,6 +2,8 @@ import db
 import random as r
 from colorama import *
 from team import *
+from hero_pool import *
+
 
 def create_team():
     team_name = input("Team name: ")
@@ -92,7 +94,14 @@ def print_team_list():
 
 
 def get_coefficient(param: int) -> float:
-    return 1 + (param/100)
+    return 1 + (param / 100)
+
+
+def has_support(players: list[Player]) -> bool:
+    for player in players:
+        if player.position in ['Sup', 'Semi-Sup']:
+            return True
+    return False
 
 
 def start_quick_match():
@@ -111,19 +120,40 @@ def start_quick_match():
 
         team1_ids = db.get_player_ids(team1.name)
         for id in team1_ids:
-           team1.append_player(Player(*db.get_player_info(id)))
+            team1.append_player(Player(*db.get_player_info(id)))
 
         team2_ids = db.get_player_ids(team2.name)
         for id in team2_ids:
             team2.append_player(Player(*db.get_player_info(id)))
 
+        teams_score = [0, 0]
+        match_results = []
+        match_wins = [0, 0]
+        teams = [team1, team2]
+
         for i in range(match_count):
+            print(Fore.CYAN + "=================" + Fore.RESET)
             print("Match", i, "started")
 
             base_hp = [100, 100]
-            teams_score = [0, 0]
+            match_teams_score = [0, 0]
 
-            teams = [team1, team2]
+            hero_pool = HeroPool()
+            hero_ids = db.get_hero_ids()
+            for id in hero_ids:
+                hero_pool.append_hero(Hero(*db.get_hero_info(id)))
+
+
+            signatures_picked_count = [0, 0]
+            for i in range(2):
+                for player in teams[i].players:
+                    player.assign_hero(hero_pool.pick_hero(player.position))
+                    if player.is_using_signature:
+                        signatures_picked_count[i] += 1
+
+            for i in range(2):
+                print("Pick: ", Fore.GREEN + teams[i].name + Fore.RESET, "signatures: ", signatures_picked_count[i])
+
             for team in teams:
                 team.reset_gold()
 
@@ -134,14 +164,168 @@ def start_quick_match():
                 if event == 'farm':
                     for team in teams:
                         for player in team.players:
-                            player.gold += int(r.randint(10, 100) * get_coefficient(player.gold))
+                            player.gold += (int(r.randint(10, 200)
+                                                * get_coefficient(player.farm)
+                                                * player.hero.farm
+                                                * (1.2 if player.is_using_signature else 1)))
+                else:
+                    print("==========")
+                    print("Fight on", clock, "minute")
+                    print("Networth: ", team1.name, Fore.LIGHTYELLOW_EX + str(team1.get_networth()) + Fore.RESET)
+                    print("Networth: ", team2.name, Fore.LIGHTYELLOW_EX + str(team2.get_networth()) + Fore.RESET)
+
+                    teams_fight_squad = [[], []]
+                    for i in range(2):
+                        for player in teams[i].players:
+                            if (r.randint(10, 60)
+                                * get_coefficient(player.teamwork)
+                                * player.hero.teamwork
+                                * get_coefficient(teams[i].communication)) > 50:
+                                teams_fight_squad[i].append(player)
+
+                    print(team1.name, "players: ", len(teams_fight_squad[0]))
+                    print(team2.name, "players: ", len(teams_fight_squad[1]))
+
+                    while len(teams_fight_squad[0]) != 0 and len(teams_fight_squad[1]) != 0:
+                        team1_pick: Player = r.choice(teams_fight_squad[0])
+                        team2_pick: Player = r.choice(teams_fight_squad[1])
+
+                        team1_kill_score = r.randint(10, 100) \
+                                           * get_coefficient(team1_pick.fight) \
+                                           * team1_pick.hero.fight
+
+                        team2_kill_score = r.randint(10, 100) \
+                                           * get_coefficient(team2_pick.fight) \
+                                           * team2_pick.hero.fight
+
+                        # Signatures
+                        if team1_pick.is_using_signature:
+                            team1_kill_score += r.randint(1,30)
+
+                        if team2_pick.is_using_signature:
+                            team2_kill_score += r.randint(1,30)
+
+                        # Gold
+                        gold_dif = team1_pick.gold - team2_pick.gold
+                        if gold_dif > 0:
+                            team1_kill_score += gold_dif * 0.001
+                        else:
+                            team2_kill_score += abs(gold_dif) * 0.001
+
+                        # Morale
+                        hp_dif = base_hp[0] - base_hp[1]
+                        if hp_dif > 0:
+                            team2_kill_score += r.randint(1, 20) * get_coefficient(team2.morale) + hp_dif * 0.1
+                        else:
+                            team1_kill_score += r.randint(1, 20) * get_coefficient(team1.morale) + abs(hp_dif) * 0.1
+
+                        # Sup
+                        if has_support(teams_fight_squad[0]):
+                            team1_kill_score += r.randint(1, 10) * get_coefficient(team1.communication)
+                        if has_support(teams_fight_squad[1]):
+                            team2_kill_score += r.randint(1, 10) * get_coefficient(team2.communication)
+
+                        # Kill
+                        if team1_kill_score > team2_kill_score:
+                            match_teams_score[0] += 1
+                            team1_pick.gold += r.randint(10, 500)
+                            team1_pick.kills += 1
+                            for player in teams_fight_squad[0]:
+                                if player != team1_pick:
+                                    player.assists += 1
+                            team2_pick.deaths += 1
+                            teams_fight_squad[1].remove(team2_pick)
+
+                        elif team1_kill_score < team2_kill_score:
+                            match_teams_score[1] += 1
+                            team2_pick.gold += r.randint(10, 500)
+                            team2_pick.kills += 1
+                            for player in teams_fight_squad[1]:
+                                if player != team2_pick:
+                                    player.assists += 1
+                            team1_pick.deaths += 1
+                            teams_fight_squad[0].remove(team1_pick)
+
+                    if len(teams_fight_squad[0]) == 0:
+                        damage = int(r.randint(1, 30) * (1 + len(teams_fight_squad[1]) * 0.1))
+                        base_hp[0] -= damage
+                        print("Team ", team2.name, "won the fight with advantage of ",
+                              str(len(teams_fight_squad[1]) - len(teams_fight_squad[0])))
+                        print(team1.name, base_hp[0], Fore.LIGHTRED_EX + "-" + str(damage) + Fore.RESET)
+                        print(team2.name, base_hp[1])
+                    else:
+                        damage = int(r.randint(1, 30) * (1 + len(teams_fight_squad[0]) * 0.1))
+                        base_hp[1] -= damage
+                        print("Team ", team1.name, "won the fight with advantage of ",
+                              str(len(teams_fight_squad[0]) - len(teams_fight_squad[1])))
+                        print(team1.name, base_hp[0])
+                        print(team2.name, base_hp[1], Fore.LIGHTRED_EX + "-" + str(damage) + Fore.RESET)
+
+                    print("==========")
+
+                if base_hp[0] <= 0:
+                    game_over = True
+                    match_result = Fore.LIGHTBLUE_EX + team1.name + Fore.RESET + " lost. kills: " + str(
+                        match_teams_score[0]) + "\n" + \
+                                   Fore.LIGHTGREEN_EX + team2.name + Fore.RESET + " wins. kills: " + str(
+                        match_teams_score[1]) + "\n" + \
+                                   "Match length: " + str(clock) + " minutes" + "\n" + \
+                        "Networth: " + str(team1.get_networth()-team2.get_networth()) + "\n"
+                    print(match_result)
+                    print(Fore.CYAN + "==========" + Fore.RESET)
+                    match_results.append(match_result)
+                    teams_score[0] += match_teams_score[0]
+                    teams_score[1] += match_teams_score[1]
+                    match_wins[1] += 1
+                    db.update_hero_stats(teams, 1)
+
+                elif base_hp[1] <= 0:
+                    game_over = True
+                    match_result = Fore.LIGHTBLUE_EX + team1.name + Fore.RESET + " wins. kills: " + str(
+                        match_teams_score[0]) + "\n" + \
+                                   Fore.LIGHTGREEN_EX + team2.name + Fore.RESET + " lost. kills: " + str(
+                        match_teams_score[1]) + "\n" + \
+                                   "Match length: " + str(clock) + " minutes" + "\n" + \
+                                   "Networth: " + str(team1.get_networth() - team2.get_networth()) + "\n"
+                    print(match_result)
+                    print(Fore.CYAN + "==========" + Fore.RESET)
+                    match_results.append(match_result)
+                    teams_score[0] += match_teams_score[0]
+                    teams_score[1] += match_teams_score[1]
+                    match_wins[0] += 1
+                    db.update_hero_stats(teams, 0)
+
                 clock += 1
 
+        print(Fore.LIGHTRED_EX + "Game Ended")
+        print("Matches info:")
+        print("\n".join(match_results))
+        print("Overall:")
+        print(Fore.LIGHTBLUE_EX + '%-15s' % team1.name + Fore.RESET, ":", match_wins[0], "   kills: ", teams_score[0])
+        print(Fore.LIGHTGREEN_EX + '%-15s' % team2.name + Fore.RESET, ":", match_wins[1], "   kills: ", teams_score[1])
+        print("KDA:")
+
+        for team in teams:
+            print(team.name)
+            for player in team.players:
+                kda_stroke = '%-15s'%player.name
+                kda_stroke += str(player.kills) + "/" + str(player.deaths) + "/" + str(player.assists)
+                print(kda_stroke)
+            print()
+
+        all_players = []
+        all_players.extend(team1.players)
+        all_players.extend(team2.players)
+        all_players.sort(key=lambda player: player.kills+player.assists, reverse=True)
+        mvp: Player = all_players[0]
+        print("MVP", Fore.LIGHTYELLOW_EX + mvp.name + Fore.RESET)
+
+        db.update_stats(teams, match_wins)
 
 
 def main():
     db.init()
-    print("Welcome to DotaSim2 v0")
+    print("Welcome to DotaSim2 patch: v1t0b0")
     while True:
         user_input = input(">> ")
 
