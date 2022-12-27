@@ -1,8 +1,10 @@
+import time
 import db
-import random as r
 from colorama import *
 from team import *
 from hero_pool import *
+
+app_ver = 'v1t0b0'
 
 
 def create_team():
@@ -119,12 +121,12 @@ def start_quick_match():
         team2 = Team(team2_name, *db.get_coach_stats(team2_name))
 
         team1_ids = db.get_player_ids(team1.name)
-        for id in team1_ids:
-            team1.append_player(Player(*db.get_player_info(id)))
+        for h_id in team1_ids:
+            team1.append_player(Player(*db.get_player_info(h_id)))
 
         team2_ids = db.get_player_ids(team2.name)
-        for id in team2_ids:
-            team2.append_player(Player(*db.get_player_info(id)))
+        for h_id in team2_ids:
+            team2.append_player(Player(*db.get_player_info(h_id)))
 
         teams_score = [0, 0]
         match_results = []
@@ -132,6 +134,10 @@ def start_quick_match():
         teams = [team1, team2]
 
         for i in range(match_count):
+            if match_wins[0] > (match_count / 2):
+                break
+            elif match_wins[1] > (match_count / 2):
+                break
             print(Fore.CYAN + "=================" + Fore.RESET)
             print("Match", i, "started")
 
@@ -140,19 +146,18 @@ def start_quick_match():
 
             hero_pool = HeroPool()
             hero_ids = db.get_hero_ids()
-            for id in hero_ids:
-                hero_pool.append_hero(Hero(*db.get_hero_info(id)))
-
+            for h_id in hero_ids:
+                hero_pool.append_hero(Hero(*db.get_hero_info(h_id)))
 
             signatures_picked_count = [0, 0]
-            for i in range(2):
-                for player in teams[i].players:
+            for j in range(2):
+                for player in teams[j].players:
                     player.assign_hero(hero_pool.pick_hero(player.position))
                     if player.is_using_signature:
-                        signatures_picked_count[i] += 1
+                        signatures_picked_count[j] += 1
 
-            for i in range(2):
-                print("Pick: ", Fore.GREEN + teams[i].name + Fore.RESET, "signatures: ", signatures_picked_count[i])
+            for k in range(2):
+                print("Pick: ", Fore.GREEN + teams[k].name + Fore.RESET, "signatures: ", signatures_picked_count[k])
 
             for team in teams:
                 team.reset_gold()
@@ -175,13 +180,13 @@ def start_quick_match():
                     print("Networth: ", team2.name, Fore.LIGHTYELLOW_EX + str(team2.get_networth()) + Fore.RESET)
 
                     teams_fight_squad = [[], []]
-                    for i in range(2):
-                        for player in teams[i].players:
+                    for m in range(2):
+                        for player in teams[m].players:
                             if (r.randint(10, 60)
                                 * get_coefficient(player.teamwork)
                                 * player.hero.teamwork
-                                * get_coefficient(teams[i].communication)) > 50:
-                                teams_fight_squad[i].append(player)
+                                * get_coefficient(teams[m].communication)) > 50:
+                                teams_fight_squad[m].append(player)
 
                     print(team1.name, "players: ", len(teams_fight_squad[0]))
                     print(team2.name, "players: ", len(teams_fight_squad[1]))
@@ -200,10 +205,10 @@ def start_quick_match():
 
                         # Signatures
                         if team1_pick.is_using_signature:
-                            team1_kill_score += r.randint(1,30)
+                            team1_kill_score += r.randint(1, 30)
 
                         if team2_pick.is_using_signature:
-                            team2_kill_score += r.randint(1,30)
+                            team2_kill_score += r.randint(1, 30)
 
                         # Gold
                         gold_dif = team1_pick.gold - team2_pick.gold
@@ -270,7 +275,7 @@ def start_quick_match():
                                    Fore.LIGHTGREEN_EX + team2.name + Fore.RESET + " wins. kills: " + str(
                         match_teams_score[1]) + "\n" + \
                                    "Match length: " + str(clock) + " minutes" + "\n" + \
-                        "Networth: " + str(team1.get_networth()-team2.get_networth()) + "\n"
+                                   "Networth: " + str(team1.get_networth() - team2.get_networth()) + "\n"
                     print(match_result)
                     print(Fore.CYAN + "==========" + Fore.RESET)
                     match_results.append(match_result)
@@ -296,6 +301,7 @@ def start_quick_match():
                     db.update_hero_stats(teams, 0)
 
                 clock += 1
+                time.sleep(0.5)
 
         print(Fore.LIGHTRED_EX + "Game Ended")
         print("Matches info:")
@@ -308,7 +314,7 @@ def start_quick_match():
         for team in teams:
             print(team.name)
             for player in team.players:
-                kda_stroke = '%-15s'%player.name
+                kda_stroke = '%-15s' % player.name
                 kda_stroke += str(player.kills) + "/" + str(player.deaths) + "/" + str(player.assists)
                 print(kda_stroke)
             print()
@@ -316,7 +322,7 @@ def start_quick_match():
         all_players = []
         all_players.extend(team1.players)
         all_players.extend(team2.players)
-        all_players.sort(key=lambda player: player.kills+player.assists, reverse=True)
+        all_players.sort(key=lambda player: player.kills + player.assists, reverse=True)
         mvp: Player = all_players[0]
         print("MVP", Fore.LIGHTYELLOW_EX + mvp.name + Fore.RESET)
 
@@ -325,7 +331,7 @@ def start_quick_match():
 
 def main():
     db.init()
-    print("Welcome to DotaSim2 patch: v1t0b0")
+    print("Welcome to DotaSim2 patch:", app_ver)
     while True:
         user_input = input(">> ")
 
